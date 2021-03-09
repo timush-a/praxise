@@ -48,15 +48,15 @@ class Loader:
         with open('log.txt', 'a') as f:
             try:
                 data = CSVReader.read(csv_file_name)
-            except IOError:
+            except IOError as err:
                 f.write(f'{datetime.datetime.now().strftime("%Y-%h-%d  %H-%M-%S")}'
-                        f'\nAn error was found while reading the file')
+                        f'\n{err}\n')
 
             try:
                 SortDictionaryValues.sort(data)
-            except (IndexError, ValueError):
+            except (IndexError, ValueError) as err:
                 f.write(f'{datetime.datetime.now().strftime("%Y-%h-%d  %H-%M-%S")}'
-                        f'\nAn error was found while sorting dictionary values')
+                        f'\n{err}\n')
 
             else:
                 elapsed_time = time.strftime('%H:%M:%S', time.localtime(time.time() - start_creation))
