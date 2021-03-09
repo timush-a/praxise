@@ -1,12 +1,11 @@
 import socket
-import json
+import storage_driver
+import load_csv
 
 
 class Server:
-    db = None
-    handler = None
-    request = method = url = code = None
-    sku = endpoint = probability = None
+    db = load_csv.Loader.load('recommends.csv')
+    handler = storage_driver.StorageDriver.select
 
     def __init__(self, host, port):
         self.host = host
@@ -23,65 +22,64 @@ class Server:
         return '200 OK'
 
     @staticmethod
-    def _create_body():
-        product_id = Server.sku
-        probability = Server.probability
-        return handler(db)
+    def _create_body(request: str):
+        product_id = Server.__get_sku(request)
+        probability = Server.__get_probability(request)
+        return Server.handler(Server.db, product_id, probability)
 
     @staticmethod
-    def _generate_response():
-        headers, code = Server._generate_headers()
+    def _generate_response(request: str):
+        headers, code = Server._generate_headers(request)
         status = Server._generate_status(code)
-        body = Server._create_body()
+        body = Server._create_body(request)
         if body:
-            print(body)
-            return f'{body}'
-        return f'{headers}\n\n{status}\n\n'
+            return f'{headers}\n\n{body}'.encode()
+        else:
+            return f'{headers}\n\nSKU not found\n\n{status}'.encode()
 
     @staticmethod
-    def _generate_headers() -> tuple:
-        if Server.method != 'GET':
+    def _generate_headers(request: str) -> tuple:
+        if Server.__get_method(request) != 'GET':
             return 'HTTP/1.1 405 Method not allowed\n\n', 405
 
-        if Server.endpoint() != 'sku':
+        if Server.__get_endpoint(request) != 'sku':
             return 'HTTP/1.1 404 Not found', 404
 
-        if not Server.sku():
+        if not Server.__get_endpoint(request):
             return 'HTTP/1.1 404 Not found', 404
 
         return 'HTTP/1.1 200 OK', 200
 
     @staticmethod
-    def __get_method() -> None:
-        Server.method = Server.request.split(' ')[0]
+    def __get_method(request: str) -> str:
+        return request.split(' ')[0]
 
     @staticmethod
-    def __get_url() -> None:
-        Server.url = Server.request.split(' ')[1]
+    def __get_url(request: str) -> str:
+        return request.split(' ')[1]
 
     @staticmethod
-    def __get_endpoint() -> None:
+    def __get_endpoint(request: str):
         try:
-            Server.url.split('/')[1]
+            Server.__get_url(request).split('/')[1]
         except IndexError:
-            pass
-        Server.endpoint = Server.url.split('/')[1]
+            return None
+        return Server.__get_url(request).split('/')[1]
 
     @staticmethod
     def __get_sku(request: str):
         try:
-            str(Server.url.split('/')[2])
+            str(Server.__get_url(request).split('/')[2])
         except (IndexError, ValueError):
-            pass
-        Server.sku = Server.url(request).split('/')[2]
+            return ''
+        return Server.__get_url(request).split('/')[2]
 
     @staticmethod
-    def __get_probability():
-        try:
-            0 > float(Server.url.split('/')[3]) < 1
-        except (IndexError, ValueError):
-            Server.probability = 0
-        Server.url = Server.url.split('/')[3]
+    def __get_probability(request: str) -> float:
+        print(float(Server.__get_url(request).split('/')[3]))
+        if 0 > float(Server.__get_url(request).split('/')[3]) > 1:
+            return 1.0
+        return float(Server.__get_url(request).split('/')[3])
 
     def run_server(self):
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -90,9 +88,9 @@ class Server:
         while True:
             client_socket, address = server_socket.accept()
 
-            Server.request = client_socket.recv(1024).decode('utf-8')
+            request = client_socket.recv(1024).decode()
 
-            response = Server._generate_response()
+            response = Server._generate_response(request)
 
-            client_socket.sendall(response.encode())
+            client_socket.sendall(response)
             client_socket.close()
