@@ -35,7 +35,7 @@ class Server:
         if body:
             return f'{headers}\n\n{body}'.encode()
         else:
-            return f'{headers}\n\nSKU not found\n\n{status}'.encode()
+            return f'{headers}\n{status}\nSKU not found'.encode()
 
     @staticmethod
     def _generate_headers(request: str) -> tuple:
@@ -76,9 +76,10 @@ class Server:
 
     @staticmethod
     def __get_probability(request: str) -> float:
-        print(float(Server.__get_url(request).split('/')[3]))
-        if 0 > float(Server.__get_url(request).split('/')[3]) > 1:
-            return 1.0
+        try:
+            float(Server.__get_url(request).split('/')[3])
+        except (IndexError, ValueError):
+            return 0
         return float(Server.__get_url(request).split('/')[3])
 
     def run_server(self):
