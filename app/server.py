@@ -1,86 +1,62 @@
 import socket
-import storage_driver
-import load_csv
 
 
 class Server:
-    db = load_csv.Loader.load('recommends.csv')
-    handler = storage_driver.StorageDriver.select
-
-    def __init__(self, host, port):
+    def __init__(self, host, port, database, db_select):
         self.host = host
         self.port = port
+        self.storage = database
+        self.db_select = db_select
+        self.request = None
 
-    @staticmethod
-    def _generate_status(code: str) -> str:
-        if code == 404:
-            return '404 Not found'
+    def _create_body(self):
+        return self.db_select(self.sku,
+                              self.probability)
 
-        if code == 405:
-            return '405 Method not allowed'
+    def _generate_response(self) -> bytes:
+        self.headers, self.code = self._generate_headers()
+        self.body = self._create_body()
+        if self.code != 200:
+            return self.headers.encode()
+        if self.body:
+            return f"{self.headers}{' '.join(self.body)}".encode()
 
-        return '200 OK'
+        return f'{self.headers} SKU not found'.encode()
 
-    @staticmethod
-    def _create_body(request: str):
-        product_id = Server.__get_sku(request)
-        probability = Server.__get_probability(request)
-        return Server.handler(Server.db, product_id, probability)
-
-    @staticmethod
-    def _generate_response(request: str):
-        headers, code = Server._generate_headers(request)
-        status = Server._generate_status(code)
-        body = Server._create_body(request)
-        if body:
-            return f'{headers}\n\n{body}'.encode()
-        else:
-            return f'{headers}\n{status}\nSKU not found'.encode()
-
-    @staticmethod
-    def _generate_headers(request: str) -> tuple:
-        if Server.__get_method(request) != 'GET':
+    def _generate_headers(self) -> tuple:
+        req_data = self._parse_request()
+        if req_data[0] != 'GET':
             return 'HTTP/1.1 405 Method not allowed\n\n', 405
 
-        if Server.__get_endpoint(request) != 'sku':
-            return 'HTTP/1.1 404 Not found', 404
+        if req_data[1] != 'get_probability':
+            return 'HTTP/1.1 404 Not found\n\n', 404
 
-        if not Server.__get_endpoint(request):
-            return 'HTTP/1.1 404 Not found', 404
+        return 'HTTP/1.1 200 OK\n\n', 200
 
-        return 'HTTP/1.1 200 OK', 200
-
-    @staticmethod
-    def __get_method(request: str) -> str:
-        return request.split(' ')[0]
-
-    @staticmethod
-    def __get_url(request: str) -> str:
-        return request.split(' ')[1]
-
-    @staticmethod
-    def __get_endpoint(request: str):
+    def _parse_request(self):
         try:
-            Server.__get_url(request).split('/')[1]
+            method = self.request.split(' ')[0]
+            path = self.request.split(' ')[1]
+            endpoint = path.split('/')[1]
         except IndexError:
-            return None
-        return Server.__get_url(request).split('/')[1]
+            return 'Index error'
 
-    @staticmethod
-    def __get_sku(request: str):
         try:
-            str(Server.__get_url(request).split('/')[2])
+            resp_data = path.split('/')[2]
+            if '&' in resp_data:
+                sku = resp_data.split('&')[0]
+                probability = float(resp_data.split('&')[1])
+            else:
+                sku = resp_data
+                probability = 0
         except (IndexError, ValueError):
-            return ''
-        return Server.__get_url(request).split('/')[2]
+            sku = ''
+            probability = 0
 
-    @staticmethod
-    def __get_probability(request: str) -> float:
-        try:
-            float(Server.__get_url(request).split('/')[3])
-        except (IndexError, ValueError):
-            return 0
-        return float(Server.__get_url(request).split('/')[3])
+        self.sku = sku
+        self.probability = probability
+
+        return method, endpoint, sku, probability
 
     def run_server(self):
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -89,9 +65,6 @@ class Server:
         while True:
             client_socket, address = server_socket.accept()
 
-            request = client_socket.recv(1024).decode()
-
-            response = Server._generate_response(request)
-
-            client_socket.sendall(response)
+            self.request = client_socket.recv(1024).decode('utf-8')
+            client_socket.send(self._generate_response())
             client_socket.close()
