@@ -60,7 +60,8 @@ class Driver:
 
     def select(self, key: str, threshold=0):
         try:
-            return [a[0] for a in filter(
+            result = [a[0] for a in filter(
                 lambda i: float(i[1]) >= threshold, self.data.get(key))]
+            return json.dumps({f'Recommended goods list for {key}': ', '.join(result)})
         except (TypeError, AttributeError):
-            return None
+            return json.dumps(f'Key {key} not found')
